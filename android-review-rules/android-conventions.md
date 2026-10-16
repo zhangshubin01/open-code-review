@@ -47,14 +47,16 @@ OCR 的评论带 `severity` 和 `category` 两个字段，取值是**固定枚�
 4. 在应用里引入全新技术栈（新框架、新网络库、新 DI）而没有在改动里说明理由。
 5. 静默失败：吞掉异常、忽略错误返回值、`catch` 后不处理也不上报。
 
-## 4. 明确不归 OCR 管（别在这里重复劳动）
+## 4. lint 全量扫描与 OCR 的分工（别在这里重复劳动）
 
-以下检查交给工具链，OCR 规则里**不要**写，模型也不该报：
+每次审查前，`scripts/review.sh` 会跑一次全量 `./gradlew lint`，把结果整理成 `.ocr/lint-report.md` 作为背景注入。OCR 对照这份报告审查，**不重复报** lint 已经发现的问题，只做工具做不到的事。
+
+以下检查交给工具链，OCR 规则里**不要**写，模型也不该重复报：
 
 - 代码格式、缩进、import 顺序、命名规范 → ktlint
 - 可静态判定的代码异味、复杂度、未使用资源 → detekt / Android Lint
 - API 级别误用（`NewApi`）、资源引用错误、Manifest 结构错误 → Android Lint
-- 已知的 `@Deprecated` 符号 → Android Lint + Kotlin 编译警告（清单见 `.ocr/deprecated-apis.md`）
+- 已知的 `@Deprecated` 符号 → Android Lint + Kotlin 编译警告（见 `.ocr/lint-report.md`）
 
 OCR 只做这些工具做不到的事：**语义、意图、跨文件影响、约定与架构的一致性**。
 

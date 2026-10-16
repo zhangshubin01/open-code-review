@@ -19,7 +19,7 @@ SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 # This script lives at <repo>/scripts/review.sh, so the repo root is one level up.
 REPO_ROOT="$(cd "$SCRIPT_DIR/.." && pwd)"
 CONVENTIONS="$REPO_ROOT/.ocr/android-conventions.md"
-DEPRECATED="$REPO_ROOT/.ocr/deprecated-apis.md"
+LINT_REPORT="$REPO_ROOT/.ocr/lint-report.md"
 # Deterministic path rather than mktemp: exec below replaces this shell, so a
 # trap would never fire and a temp file would leak on every run.
 MERGED="$REPO_ROOT/.ocr/.review-background.md"
@@ -34,19 +34,19 @@ if ! command -v ocr >/dev/null 2>&1; then
   exit 127
 fi
 
-# Refresh the deprecated-API checklist before reviewing, so the rule's source
-# of truth is current. stdout is sent to stderr to keep the review output clean.
-# Opt out with OCR_SKIP_DEPRECATED_REFRESH=1 when the checklist is already
+# Refresh the full lint report before reviewing, so the review combines the
+# latest lint findings. stdout is sent to stderr to keep the review output
+# clean. Opt out with OCR_SKIP_LINT_REFRESH=1 when the report is already
 # current and the lint run is too slow for the moment.
-if [[ -z "${OCR_SKIP_DEPRECATED_REFRESH:-}" ]]; then
-  if ! "$SCRIPT_DIR/refresh-deprecated-apis.sh" >&2; then
-    echo "warning: deprecated-API checklist refresh failed; using the existing checklist if present" >&2
+if [[ -z "${OCR_SKIP_LINT_REFRESH:-}" ]]; then
+  if ! "$SCRIPT_DIR/collect-lint-report.sh" >&2; then
+    echo "warning: lint report refresh failed; using the existing report if present" >&2
   fi
 fi
 
 BACKGROUND="$CONVENTIONS"
-if [[ -f "$DEPRECATED" ]]; then
-  cat "$CONVENTIONS" "$DEPRECATED" > "$MERGED"
+if [[ -f "$LINT_REPORT" ]]; then
+  cat "$CONVENTIONS" "$LINT_REPORT" > "$MERGED"
   BACKGROUND="$MERGED"
 fi
 

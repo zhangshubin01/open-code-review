@@ -15,7 +15,7 @@ OpenCodeReview（`ocr`）做的是确定性工具做不了的那一层：**语�
 | 格式、命名、import 顺序 | ktlint |
 | 代码异味、复杂度、未使用资源 | detekt / Android Lint |
 | API 级别误用、资源与 Manifest 结构 | Android Lint |
-| 已知 `@Deprecated` 符号 | Android Lint + Kotlin 编译警告 → 喂给 `.ocr/deprecated-apis.md` 清单 |
+| 已知 `@Deprecated` 符号 | Android Lint + Kotlin 编译警告 → 喂给 `.ocr/lint-report.md` 全量报告 |
 | **语义、意图、跨文件影响、架构一致性** | **本规范（OCR）** |
 
 ## 每条判定标准的共同约定
@@ -49,93 +49,111 @@ OpenCodeReview（`ocr`）做的是确定性工具做不了的那一层：**语�
 
 ## 逐文件判定标准
 
+下表按文件类型逐类列出判定标准，每条对应 `rule.json` 里的一条规则，并遵循上面的「共同约定」（只看这次改动 + severity/category 词表）。
+
 ### 1. ProGuard/R8 配置（`**/*.pro`）
 
-混淆/裁剪配置的问题只会在 **release 构建**暴露，所以尤其危险。要报的：
+混淆/裁剪配置的问题只会在 **release 构建**暴露，所以尤其危险。
 
-- **keep 规则被删除或收窄**。反射可达的类必须保持 keep：Gson、Moshi、kotlinx.serialization、Retrofit、Hilt/Dagger、用于 JSON 的模型类。只有同一改动**同时**删掉了反射访问，删除 keep 才不算问题。
-- **`-dontshrink` / `-dontobfuscate` / `-dontoptimize`**：关掉一项 release 安全网，必须有注释说明理由。
-- **全量 keep**（`-keep class **`、`-keep class com.example.** { *; }`）：让 shrink 失去意义。
-- **新增 `-dontwarn <package>`**：会掩盖一个真正缺失的依赖。
+| 检查点 | 判定标准 |
+|---|---|
+| keep 规则被删除或收窄 | 反射可达的类必须保持 keep：Gson、Moshi、kotlinx.serialization、Retrofit、Hilt/Dagger、用于 JSON 的模型类。只有同一改动**同时**删掉了反射访问，删除 keep 才不算问题。 |
+| `-dontshrink` / `-dontobfuscate` / `-dontoptimize` | 关掉一项 release 安全网，必须有注释说明理由。 |
+| 全量 keep | `-keep class **`、`-keep class com.example.** { *; }` 会让 shrink 失去意义。 |
+| 新增 `-dontwarn <package>` | 会掩盖一个真正缺失的依赖。 |
 
 ### 2. Gradle 构建脚本（`**/build.gradle*`）
 
-要报的：
-
-- **依赖版本未 pin**：`-SNAPSHOT`、`+`、`latest.release`、`[1.0,)` 区间 → 要求显式版本；版本不在增删改的行上时忽略。
-- **`compileSdk` / `targetSdk` 变更**：报并要求给出理由。`minSdk` 调高会丢掉支持的设备，调低则需要兼容性审查。
-- **release 构建类型关闭 `minifyEnabled` 或 `shrinkResources`**。
-- **签名凭据硬编码**：脚本里的 keystore 密码、或指向仓库外的 `storeFile`。
-- **依赖 scope 漂移**：debug 专用库被移到 `implementation`/`api`（现在会跟着进 release），或 release 库被移到 `debugImplementation`。
-- **`api()` 用在 `implementation()` 就够的地方**：`api` 会把依赖泄漏给每个消费者。
-- **加依赖没写版本**，而同文件里没有应用 BOM/platform。
-- **仓库声明散落在构建脚本里**，而不是集中在 `settings.gradle`。
-- **`packagingOptions` / `packaging` 静默丢弃 `.so` 文件或资源**。
-- **`applicationId`、`versionCode`、`versionName` 变更**。
+| 检查点 | 判定标准 |
+|---|---|
+| 依赖版本未 pin | `-SNAPSHOT`、`+`、`latest.release`、`[1.0,)` 区间 → 要求显式版本；版本不在增删改的行上时忽略。 |
+| `compileSdk` / `targetSdk` 变更 | 报并要求给出理由；`minSdk` 调高会丢掉支持的设备，调低则需要兼容性审查。 |
+| release 安全网 | `minifyEnabled` / `shrinkResources` 在 release 构建类型被关闭。 |
+| 签名凭据硬编码 | 脚本里的 keystore 密码，或指向仓库外的 `storeFile`。 |
+| 依赖 scope 漂移 | debug 专用库被移到 `implementation`/`api`（会跟着进 release），或 release 库被移到 `debugImplementation`。 |
+| `api()` 用在 `implementation()` 就够的地方 | `api` 会把依赖泄漏给每个消费者。 |
+| 加依赖没写版本 | 而同文件里没有应用 BOM/platform。 |
+| 仓库声明散落在构建脚本里 | 而不是集中在 `settings.gradle`。 |
+| 打包选项 | `packagingOptions` / `packaging` 静默丢弃 `.so` 文件或资源。 |
+| 应用身份变更 | `applicationId` / `versionCode` / `versionName` 变更。 |
 
 ### 3. Gradle 设置（`**/settings.gradle*`）
 
-- **新增非允许清单仓库**：`pluginManagement` / `dependencyResolutionManagement` 里出现 `google()`、`mavenCentral()`、公司镜像之外的新第三方仓库——这是供应链决策，不是构建细节。
-- **`repositoriesMode` 从 `FAIL_ON_PROJECT_REPOS` 放宽**。
-- **模块从 `include` 移除**：孤立了源码，还是有意的拆分？
-- **模块加入 `include` 但没有对应目录**。
+| 检查点 | 判定标准 |
+|---|---|
+| 新增非允许清单仓库 | `pluginManagement` / `dependencyResolutionManagement` 里出现 `google()`、`mavenCentral()`、公司镜像之外的新第三方仓库——这是供应链决策，不是构建细节。 |
+| 仓库模式放宽 | `repositoriesMode` 从 `FAIL_ON_PROJECT_REPOS` 放宽。 |
+| 模块从 `include` 移除 | 孤立了源码，还是有意的拆分？ |
+| 模块加入 `include` 但没有对应目录 | 报。 |
 
 ### 4. 版本目录（`**/libs.versions.toml`）
 
-- **`[versions]` 条目被删除或降级，但 `[libraries]` / `[plugins]` 仍引用它**：构建崩溃或静默回退。
-- **library/plugin 的 alias 没有对应的版本条目**。
-- **两个 alias 解析到同一个 artifact group 的不同版本**。
-- **版本未 pin**：`-SNAPSHOT`、`+`、动态区间。
-- **版本和 alias 改名但没更新消费者**，或旧名字条目残留。
+| 检查点 | 判定标准 |
+|---|---|
+| `[versions]` 条目被删除或降级，但 `[libraries]` / `[plugins]` 仍引用它 | 构建崩溃或静默回退。 |
+| alias 没有对应的版本条目 | library/plugin 的 alias 没有对应的版本条目。 |
+| 同 group 多版本 | 两个 alias 解析到同一个 artifact group 的不同版本。 |
+| 版本未 pin | `-SNAPSHOT`、`+`、动态区间。 |
+| 改名未同步消费者 | 版本和 alias 改名但没更新消费者，或旧名字条目残留。 |
 
 ### 5. gradle.properties（`**/gradle.properties`）
 
-- **`android.enableJetifier=true`**：说明 classpath 上还有旧 support 库依赖——报出这个开关并问是什么需要它。
-- **`android.useAndroidX` 或 `android.nonTransitiveRClass` 被关掉**。
-- **`org.gradle.parallel`、`org.gradle.caching`、配置缓存被关掉**。
-- **`org.gradle.jvmargs` 堆被调小，或提交了机器相关的值**。
-- **签名凭据、token、本地文件绝对路径**。
+| 检查点 | 判定标准 |
+|---|---|
+| `android.enableJetifier=true` | 说明 classpath 上还有旧 support 库依赖——报出这个开关并问是什么需要它。 |
+| AndroidX 开关被关 | `android.useAndroidX` 或 `android.nonTransitiveRClass` 被关掉。 |
+| 构建缓存开关被关 | `org.gradle.parallel`、`org.gradle.caching`、配置缓存被关掉。 |
+| JVM 参数 | `org.gradle.jvmargs` 堆被调小，或提交了机器相关的值。 |
+| 凭据 | 签名凭据、token、本地文件绝对路径。 |
 
 ### 6. AndroidManifest（`**/AndroidManifest.xml`）
 
 Manifest 是攻击面，按攻击面审：
 
-- **`android:exported="true"` 且无权限守卫、无说明性的 `intent-filter`**：设备上任何应用都能启动它。反之，从有 intent-filter 的组件上**删掉 `exported`** 在 API 31+ 会崩溃。
-- **新增 `<uses-permission>` / `<permission>`**：必须最小化；危险权限要有说明理由；守护组件的自定义权限不能用 `protectionLevel="normal"`。
-- **`android:usesCleartextTraffic="true"`**，或 `networkSecurityConfig` 改动新增明文例外/用户添加的 CA。
-- **`android:debuggable`、`android:allowBackup`、`android:fullBackupContent` 被放宽**。
-- **`<provider>`（FileProvider）导出且 `grantUriPermissions` / path 集合过宽**。
-- **deep-link `<data>` 新增或扩宽**：还有谁能到达这个页面？
-- **入口 Activity 的 `launchMode`、`taskAffinity`、`excludeFromRecents` 变更**。
-- **`versionName` / `applicationId` / 签名 / `platformBuildVersion` 变更**。
+| 检查点 | 判定标准 |
+|---|---|
+| 组件导出 | `android:exported="true"` 且无权限守卫、无说明性的 `intent-filter`，设备上任何应用都能启动它；反之，从有 intent-filter 的组件上**删掉 `exported`** 在 API 31+ 会崩溃。 |
+| 新增权限 | `<uses-permission>` / `<permission>` 必须最小化；危险权限要有说明理由；守护组件的自定义权限不能用 `protectionLevel="normal"`。 |
+| 明文流量 | `android:usesCleartextTraffic="true"`，或 `networkSecurityConfig` 改动新增明文例外/用户添加的 CA。 |
+| 调试/备份开关 | `android:debuggable`、`android:allowBackup`、`android:fullBackupContent` 被放宽。 |
+| Provider 授权 | `<provider>`（FileProvider）导出且 `grantUriPermissions` / path 集合过宽。 |
+| deep-link 扩宽 | deep-link `<data>` 新增或扩宽——还有谁能到达这个页面？ |
+| 入口 Activity | 入口 Activity 的 `launchMode`、`taskAffinity`、`excludeFromRecents` 变更。 |
+| 应用身份变更 | `versionName` / `applicationId` / 签名 / `platformBuildVersion` 变更。 |
 
 ### 7. Android 资源（`**/src/main/res/**/*.xml`）
 
-- **用户可见文案硬编码在布局里**（`android:text="Save"`）而不是 `@string/`。
-- **硬编码颜色（`#RRGGBB`）或尺寸**，而不是 `@color/` 或 `dimens.xml` 条目。
-- **图标/图片没有 `contentDescription`，也没有 `importantForAccessibility="no"`**：屏幕阅读器会撞上一个无名控件。
-- **RTL 敌意属性**：`marginLeft` / `paddingLeft` / `gravity="left|right"` / `layout_alignParentLeft` 应换成 Start/End 等价物。
-- **`textSize` 没写单位，或文本上 sp/dp 混用**。
-- **`values/` 里新增字符串，在应用有翻译时没定 `translatable`**。
+| 检查点 | 判定标准 |
+|---|---|
+| 用户可见文案硬编码 | 硬编码在布局里（`android:text="Save"`）而不是 `@string/`。 |
+| 硬编码颜色/尺寸 | `#RRGGBB` 或数值，而不是 `@color/` 或 `dimens.xml` 条目。 |
+| 无障碍缺失 | 图标/图片没有 `contentDescription`，也没有 `importantForAccessibility="no"`——屏幕阅读器会撞上一个无名控件。 |
+| RTL 敌意属性 | `marginLeft` / `paddingLeft` / `gravity="left\|right"` / `layout_alignParentLeft` 应换成 Start/End 等价物。 |
+| 字号单位 | `textSize` 没写单位，或文本上 sp/dp 混用。 |
+| 翻译标注 | `values/` 里新增字符串，在应用有翻译时没定 `translatable`。 |
 
 ### 8. Kotlin 源码（`**/*.{kt,kts}`）
 
-- **主线程阻塞**：磁盘/网络 I/O、`Thread.sleep`、UI 或生命周期回调里的 `runBlocking`。
-- **Context / Activity / View / Fragment 泄漏进更长生命周期**：`static`/`companion object` 字段、单例、或比屏幕活得更久的协程。
-- **`GlobalScope` 启动协程**，或作用域不绑定调用方的生命周期。
-- **UI 代码收集 Flow/StateFlow 没用 `repeatOnLifecycle` 或 `flowWithLifecycle`**。
-- **Compose**：composable 函数体重活/分配、`remember`/`key` 缺失或错误、热列表里的不稳定 lambda、`LaunchedEffect(Unit)` 但效果实际依赖参数。
-- **Java 互操作平台类型上的 `!!`**，或未检查的强转。
-- **吞掉失败**：空 `catch`、忽略 `Result`、没人观察异常的协程。
-- **废弃 API**：对照团队废弃清单（`.ocr/deprecated-apis.md`），不要凭记忆声称某个 API 废弃。
+| 检查点 | 判定标准 |
+|---|---|
+| 主线程阻塞 | 磁盘/网络 I/O、`Thread.sleep`、UI 或生命周期回调里的 `runBlocking`。 |
+| 对象泄漏 | Context / Activity / View / Fragment 泄漏进更长生命周期：`static`/`companion object` 字段、单例、或比屏幕活得更久的协程。 |
+| 协程作用域 | `GlobalScope` 启动协程，或作用域不绑定调用方的生命周期。 |
+| Flow 收集 | UI 代码收集 Flow/StateFlow 没用 `repeatOnLifecycle` 或 `flowWithLifecycle`。 |
+| Compose | composable 函数体重活/分配、`remember`/`key` 缺失或错误、热列表里的不稳定 lambda、`LaunchedEffect(Unit)` 但效果实际依赖参数。 |
+| 平台类型强转 | Java 互操作平台类型上的 `!!`，或未检查的强转。 |
+| 吞掉失败 | 空 `catch`、忽略 `Result`、没人观察异常的协程。 |
+| 废弃 API | 对照团队 lint 报告（`.ocr/lint-report.md`），不要凭记忆声称某个 API 废弃。 |
 
 ### 9. Java 源码（`**/*.java`）
 
-- **公开 API 缺 `@NonNull`/`@Nullable`**：调用方无从判断，Kotlin 互操作会把它变成平台类型。
-- **`AsyncTask` 或裸 `Thread`**，而项目已经用协程。
-- **`static` 字段持有 Context、View、Activity 或资源对象**。
-- **回调/监听器注册了，但从不在生命周期 teardown 里反注册**。
-- **废弃 API**：同样对照团队废弃清单。
+| 检查点 | 判定标准 |
+|---|---|
+| 可空性标注 | 公开 API 缺 `@NonNull`/`@Nullable`——调用方无从判断，Kotlin 互操作会把它变成平台类型。 |
+| 裸线程 | `AsyncTask` 或裸 `Thread`，而项目已经用协程。 |
+| 静态引用泄漏 | `static` 字段持有 Context、View、Activity 或资源对象。 |
+| 监听器反注册 | 回调/监听器注册了，但从不在生命周期 teardown 里反注册。 |
+| 废弃 API | 同样对照团队 lint 报告。 |
 
 ---
 
@@ -160,7 +178,7 @@ Manifest 是攻击面，按攻击面审：
 
 ## 落地与验收
 
-完整命令见同目录 `README.md` 的「三步采纳」和「验收」。要点：拷 `rule.json` → `<repo>/.opencodereview/rule.json`、`android-conventions.md` → `<repo>/.ocr/`、`scripts/` → `<repo>/scripts/`；填完所有 `<!-- TODO(team) -->`；跑 `refresh-deprecated-apis.sh`（自动执行 `./gradlew lint` 并读取各模块报告，传报告路径则跳过 lint）生成废弃清单；上线前务必用 `ocr rules check <file>` 看 Source/Pattern 两行、用 `ocr review --preview --format json` 确认过滤生效。
+完整命令见同目录 `README.md` 的「三步采纳」和「验收」。要点：拷 `rule.json` → `<repo>/.opencodereview/rule.json`、`android-conventions.md` → `<repo>/.ocr/`、`scripts/` → `<repo>/scripts/`；填完所有 `<!-- TODO(team) -->`；跑 `collect-lint-report.sh`（自动执行 `./gradlew lint` 并读取各模块报告，传报告路径则跳过 lint）生成全量 lint 报告；上线前务必用 `ocr rules check <file>` 看 Source/Pattern 两行、用 `ocr review --preview --format json` 确认过滤生效。
 
 ## 如何保持同步
 
