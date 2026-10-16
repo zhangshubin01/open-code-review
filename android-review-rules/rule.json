@@ -1,0 +1,65 @@
+{
+  "exclude": [
+    "**/build/**",
+    "**/.gradle/**",
+    "**/src/test/**",
+    "**/src/androidTest/**",
+    "**/local.properties",
+    "**/*.jks",
+    "**/*.keystore",
+    "**/*.apk",
+    "**/*.aab",
+    "**/.opencodereview/**",
+    "**/.ocr/**"
+  ],
+  "include": [
+    "**/*.pro"
+  ],
+  "rules": [
+    {
+      "path": "**/*.pro",
+      "rule": "ProGuard/R8 configuration.\n\n- A keep rule that is removed or narrowed breaks release-only builds: classes reached solely by reflection (Gson, Moshi, kotlinx.serialization, Retrofit, Hilt/Dagger, model classes for JSON) must stay kept. Report a removed or narrowed keep rule unless the same change also removes the reflective access.\n- `-dontshrink`, `-dontobfuscate` or `-dontoptimize` disables a release safeguard; require an explicit reason in a comment.\n- A blanket keep (`-keep class **`, `-keep class com.example.** { *; }`) makes shrinking pointless.\n- A new `-dontwarn <package>` hides a genuinely missing dependency.\n\nScope: judge this change, not the whole file - report what the added or removed lines do. Do not flag pre-existing problems the diff does not touch.\nSeverity: crash, data loss or authz bypass = critical/high; contract or behaviour change = high; maintainability = medium; style or wording = low.",
+      "merge_system_rule": true
+    },
+    {
+      "path": "**/build.gradle*",
+      "rule": "Gradle build script (Android).\n\n- Dependency version that is not pinned: `-SNAPSHOT`, `+`, `latest.release`, `[1.0,)`. Require an explicit version. Ignore this when the version is not on an added or modified line.\n- `compileSdk` / `targetSdk` changed: report and require the reason. `minSdk` raised drops supported devices; `minSdk` lowered needs a compatibility review.\n- `minifyEnabled` or `shrinkResources` disabled on a release build type.\n- Signing credentials, keystore passwords or a `storeFile` outside the repository hardcoded in the script.\n- Dependency scope drift: a debug-only library moved to `implementation`/`api` (it now ships in release), or a release library moved to `debugImplementation`.\n- `api()` used where `implementation()` would do - `api` leaks the dependency to every consumer.\n- A dependency added with no version while no BOM/platform is applied in the same file.\n- A repository declared here rather than centrally in settings.gradle.\n- `packagingOptions`/`packaging` that silently drops `.so` files or resources.\n- `applicationId`, `versionCode` or `versionName` changed.\n\nScope: judge this change, not the whole file - report what the added or removed lines do. Do not flag pre-existing problems the diff does not touch.\nSeverity: crash, data loss or authz bypass = critical/high; contract or behaviour change = high; maintainability = medium; style or wording = low.",
+      "merge_system_rule": true
+    },
+    {
+      "path": "**/settings.gradle*",
+      "rule": "Gradle settings (Android).\n\n- A repository added to `pluginManagement` or `dependencyResolutionManagement` that is not the team allowlist (google(), mavenCentral(), the company mirror). A new third-party repository is a supply-chain decision, not a build detail.\n- `repositoriesMode` relaxed away from `FAIL_ON_PROJECT_REPOS`.\n- A module removed from `include` - orphaned source or a deliberate split?\n- A module added to `include` with no corresponding directory.\n\nScope: judge this change, not the whole file - report what the added or removed lines do. Do not flag pre-existing problems the diff does not touch.\nSeverity: crash, data loss or authz bypass = critical/high; contract or behaviour change = high; maintainability = medium; style or wording = low.",
+      "merge_system_rule": true
+    },
+    {
+      "path": "**/libs.versions.toml",
+      "rule": "Gradle version catalog.\n\n- A `[versions]` entry removed or downgraded while `[libraries]` or `[plugins]` still reference it - the build breaks or silently regresses.\n- A library or plugin alias added with no matching version entry.\n- Two aliases resolving to different versions of the same artifact group.\n- A version that is not pinned (`-SNAPSHOT`, `+`, a dynamic range).\n- A version and its alias renamed without updating the consumer, or an entry left behind under the old name.\n\nScope: judge this change, not the whole file - report what the added or removed lines do. Do not flag pre-existing problems the diff does not touch.\nSeverity: crash, data loss or authz bypass = critical/high; contract or behaviour change = high; maintainability = medium; style or wording = low.",
+      "merge_system_rule": true
+    },
+    {
+      "path": "**/gradle.properties",
+      "rule": "gradle.properties (Android).\n\n- `android.enableJetifier=true` means an old support-library dependency is still on the classpath - report the switch and ask what needs it.\n- `android.useAndroidX` or `android.nonTransitiveRClass` turned off.\n- `org.gradle.parallel`, `org.gradle.caching` or the configuration cache disabled.\n- `org.gradle.jvmargs` heap lowered, or a machine-specific value committed.\n- Signing credentials, tokens or an absolute path to a local file.\n\nScope: judge this change, not the whole file - report what the added or removed lines do. Do not flag pre-existing problems the diff does not touch.\nSeverity: crash, data loss or authz bypass = critical/high; contract or behaviour change = high; maintainability = medium; style or wording = low.",
+      "merge_system_rule": true
+    },
+    {
+      "path": "**/AndroidManifest.xml",
+      "rule": "AndroidManifest - this is an attack surface, review it as one.\n\n- A component with `android:exported=\"true\"` and no permission guard and no justifying `intent-filter`: any app on the device can start it. Also report `android:exported` removed from a component that has an intent-filter (breaks on API 31+).\n- A new `<uses-permission>` or `<permission>` - must be minimal, and a dangerous permission needs a stated reason. A custom permission guarding components must not use `protectionLevel=\"normal\"`.\n- `android:usesCleartextTraffic=\"true\"`, or a `networkSecurityConfig` change that adds a cleartext exception or a user-added CA.\n- `android:debuggable`, `android:allowBackup` or `android:fullBackupContent` loosened.\n- A `<provider>` (FileProvider) export with a wide `grantUriPermissions` / path set.\n- A deep-link `<data>` added or widened - who else can reach this screen?\n- `launchMode`, `taskAffinity` or `excludeFromRecents` changed on an entry-point activity.\n- `versionName` / `applicationId` / a signature or `platformBuildVersion` change.\n\nScope: judge this change, not the whole file - report what the added or removed lines do. Do not flag pre-existing problems the diff does not touch.\nSeverity: crash, data loss or authz bypass = critical/high; contract or behaviour change = high; maintainability = medium; style or wording = low.",
+      "merge_system_rule": true
+    },
+    {
+      "path": "**/src/main/res/**/*.xml",
+      "rule": "Android resources.\n\n- User-visible text hardcoded in a layout (`android:text=\"Save\"`) instead of `@string/`.\n- A hardcoded colour (`#RRGGBB`) or dimension instead of `@color/` or a `dimens.xml` entry.\n- An icon or image with no `contentDescription` and no `importantForAccessibility=\"no\"` - a screen reader hits an unnamed control.\n- RTL-hostile attributes: `marginLeft`/`paddingLeft`/`gravity=\"left|right\"`/`layout_alignParentLeft` instead of the Start/End equivalents.\n- `textSize` with no unit, or a sp/dp mix-up on text.\n- In `values/`: a new string with no decision on `translatable` when the app ships translations.\n\nScope: judge this change, not the whole file - report what the added or removed lines do. Do not flag pre-existing problems the diff does not touch.\nSeverity: crash, data loss or authz bypass = critical/high; contract or behaviour change = high; maintainability = medium; style or wording = low.",
+      "merge_system_rule": true
+    },
+    {
+      "path": "**/*.{kt,kts}",
+      "rule": "Kotlin source (Android).\n\n- Blocking work on the main thread: disk or network I/O, `Thread.sleep`, `runBlocking` in a UI or lifecycle callback.\n- Context, Activity, View or a Fragment leaked into a longer-lived owner: a `static`/`companion object` field, a singleton, or a coroutine that outlives the screen.\n- A coroutine launched in `GlobalScope` or a scope not tied to the caller's lifecycle.\n- Collecting a `Flow`/`StateFlow` from UI code without `repeatOnLifecycle` or `flowWithLifecycle`.\n- Compose: heavy work or allocation inside a composable body, a missing or wrong `remember`/`key`, an unstable lambda in a hot list, or `LaunchedEffect(Unit)` where the effect depends on an argument.\n- `!!` on a nullable platform type coming from Java interop, or an unchecked cast.\n- A swallowed failure: an empty `catch`, an ignored `Result`, or a coroutine whose exception nobody observes.\n- A deprecated Android or Kotlin API - check the team deprecated-API checklist before claiming anything is deprecated.\n\nScope: judge this change, not the whole file - report what the added or removed lines do. Do not flag pre-existing problems the diff does not touch.\nSeverity: crash, data loss or authz bypass = critical/high; contract or behaviour change = high; maintainability = medium; style or wording = low.",
+      "merge_system_rule": true
+    },
+    {
+      "path": "**/*.java",
+      "rule": "Java source (Android).\n\n- A public API with no `@NonNull`/`@Nullable` - the caller cannot tell and Kotlin interop turns it into a platform type.\n- `AsyncTask` or a raw `Thread` where the project uses coroutines.\n- A `static` field holding a `Context`, `View`, `Activity` or a resource object.\n- A callback or listener registered but never unregistered in a lifecycle teardown.\n- A deprecated Android or Java API - check the team deprecated-API checklist before claiming anything is deprecated.\n\nScope: judge this change, not the whole file - report what the added or removed lines do. Do not flag pre-existing problems the diff does not touch.\nSeverity: crash, data loss or authz bypass = critical/high; contract or behaviour change = high; maintainability = medium; style or wording = low.",
+      "merge_system_rule": true
+    }
+  ]
+}
