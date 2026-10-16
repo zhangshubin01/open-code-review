@@ -10,7 +10,7 @@
 | `android-conventions.md` | `<repo>/.ocr/android-conventions.md` | 运行级团队上下文：技术栈、红线、严重度词表（提交） |
 | `CONVENTIONS.md` | 不需要（仅本目录） | 上面两份的**给人看**的详细说明；改规则时同步更新 |
 | `deprecated-apis.md` | `<repo>/.ocr/deprecated-apis.md` | 废弃 API 清单，由 lint 报告生成（提交） |
-| `scripts/review.sh` | `<repo>/scripts/review.sh` | 包装 `ocr review`，自动注入上面两个背景文件 |
+| `scripts/review.sh` | `<repo>/scripts/review.sh` | 包装 `ocr review`，注入背景，审查前默认刷新废弃清单 |
 | `scripts/refresh-deprecated-apis.sh` | `<repo>/scripts/refresh-deprecated-apis.sh` | 跑 `./gradlew lint` 并刷新废弃 API 清单 |
 | `scripts/deprecated-apis.template.md` | `<repo>/scripts/deprecated-apis.template.md` | 废弃清单的文案模板，`refresh-deprecated-apis.sh` 运行时读取 |
 
@@ -67,6 +67,8 @@ ocr review --preview --format json
 ```
 
 包装脚本固定带上 `--background-file`，所以团队约定不会因为有人忘了加 flag 而失效。
+
+`review.sh` 审查前会先跑一次 `refresh-deprecated-apis.sh` 刷新废弃清单；清单已是最新、想省掉这次 lint 时，用 `OCR_SKIP_DEPRECATED_REFRESH=1 ./scripts/review.sh` 跳过。
 
 ## CI 怎么接
 

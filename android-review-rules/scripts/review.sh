@@ -34,6 +34,16 @@ if ! command -v ocr >/dev/null 2>&1; then
   exit 127
 fi
 
+# Refresh the deprecated-API checklist before reviewing, so the rule's source
+# of truth is current. stdout is sent to stderr to keep the review output clean.
+# Opt out with OCR_SKIP_DEPRECATED_REFRESH=1 when the checklist is already
+# current and the lint run is too slow for the moment.
+if [[ -z "${OCR_SKIP_DEPRECATED_REFRESH:-}" ]]; then
+  if ! "$SCRIPT_DIR/refresh-deprecated-apis.sh" >&2; then
+    echo "warning: deprecated-API checklist refresh failed; using the existing checklist if present" >&2
+  fi
+fi
+
 BACKGROUND="$CONVENTIONS"
 if [[ -f "$DEPRECATED" ]]; then
   cat "$CONVENTIONS" "$DEPRECATED" > "$MERGED"
