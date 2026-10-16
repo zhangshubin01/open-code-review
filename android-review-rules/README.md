@@ -8,9 +8,10 @@
 |---|---|---|
 | `rule.json` | `<repo>/.opencodereview/rule.json` | 逐文件判定标准（提交进版本库） |
 | `android-conventions.md` | `<repo>/.ocr/android-conventions.md` | 运行级团队上下文：技术栈、红线、严重度词表（提交） |
+| `CONVENTIONS.md` | 不需要（仅本目录） | 上面两份的**给人看**的详细说明；改规则时同步更新 |
 | `deprecated-apis.md` | `<repo>/.ocr/deprecated-apis.md` | 废弃 API 清单，由 lint 报告生成（提交） |
 | `scripts/review.sh` | `<repo>/scripts/review.sh` | 包装 `ocr review`，自动注入上面两个背景文件 |
-| `scripts/refresh-deprecated-apis.sh` | `<repo>/scripts/refresh-deprecated-apis.sh` | 从 lint 报告刷新废弃 API 清单 |
+| `scripts/refresh-deprecated-apis.sh` | `<repo>/scripts/refresh-deprecated-apis.sh` | 跑 `./gradlew lint` 并刷新废弃 API 清单 |
 | `scripts/deprecated-apis.template.md` | `<repo>/scripts/deprecated-apis.template.md` | 废弃清单的文案模板，`refresh-deprecated-apis.sh` 运行时读取 |
 
 `.opencodereview/rule.json` 是官方支持的 per-project 配置，**safe to commit**；`.ocr/` 里是我们自己的约定文档，`rule.json` 已经把 `**/.ocr/**` 排除了，不会自我审查。
@@ -28,8 +29,9 @@ cp -R android-review-rules/scripts                   your-android-repo/
 #    这一节是整套规范里唯一必须按你们项目改的地方。
 
 # 3. 生成废弃 API 清单
-cd your-android-repo && ./gradlew lint
-./scripts/refresh-deprecated-apis.sh app/build/reports/lint-results-debug.xml
+cd your-android-repo
+./scripts/refresh-deprecated-apis.sh   # 自动跑 ./gradlew lint 并读取各模块产生的报告
+#    已有报告、不想重跑 lint 时：./scripts/refresh-deprecated-apis.sh app/build/reports/lint-results-debug.xml
 #    然后手工填清单里的"替代方案"列
 ```
 
@@ -80,7 +82,7 @@ GitHub Action 侧，团队规范的价值最终体现在**分流**上：`route_s
 ## 维护
 
 - **升级 compileSdk / AGP / 依赖后**：重跑 `refresh-deprecated-apis.sh`，清单变化写进 PR 说明。
-- **规则演进**：一次只改一条，改完 `ocr rules check` 确认，跑一次真实 PR 看会不会误报。加规则容易，去掉噪声难。
+- **规则演进**：一次只改一条，改完 `ocr rules check` 确认，跑一次真实 PR 看会不会误报。加规则容易，去掉噪声难。改 `rule.json` 或 `android-conventions.md` 时，同步更新 `CONVENTIONS.md`（给人看的说明），三者不要各自演化。
 - **规则文件不要写"注意性能"**：写不出来的判定标准就是无效标准，会变成模型的自由发挥。
 
 ## 四个 Android 特有的注意点
