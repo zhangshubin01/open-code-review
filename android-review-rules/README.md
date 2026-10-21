@@ -9,6 +9,8 @@
 | `rule.json` | `<repo>/.opencodereview/rule.json` | 逐文件判定标准（提交进版本库） |
 | `android-conventions.md` | `<repo>/.ocr/android-conventions.md` | 运行级团队上下文：技术栈、红线、严重度词表（提交） |
 | `CONVENTIONS.md` | 不需要（仅本目录） | 上面两份的**给人看**的详细说明；改规则时同步更新 |
+| `ADDED-RULES.md` | 不需要（仅本目录） | 历次新增的全部规则明细与验收记录（版本基线 5 条 + 安全基线 5 条 + 代码规则 2 条 + R8 优化基线 3 条）；给人看「加了哪些规则」；第 8 节是 `rule.json` 现有 81 条检查点的全量索引（一行一条，只给标题与判定范围） |
+| `R8-OPTIMIZATION-DRAFT.md` | 不需要（仅本目录） | R8 优化基线的立项背景、AGP 事实核对与「百分比审不了」的边界说明 |
 | `lint-report.md` | `<repo>/.ocr/lint-report.md` | 全量 lint 报告（所有 error/warning），审查前自动生成（提交） |
 | `scripts/review.sh` | `<repo>/scripts/review.sh` | 包装 `ocr review`，注入背景，审查前默认刷新全量 lint 报告 |
 | `scripts/collect-lint-report.sh` | `<repo>/scripts/collect-lint-report.sh` | 跑 `./gradlew lint` 并生成全量 lint 报告 |
@@ -43,8 +45,11 @@ ocr config set language 中文
 
 ```bash
 # 每个文件类型分别确认命中的规则
-for f in app/build.gradle.kts settings.gradle.kts gradle/libs.versions.toml gradle.properties \
+for f in app/build.gradle.kts settings.gradle.kts gradle/libs.versions.toml \
+         gradle/wrapper/gradle-wrapper.properties gradle.properties \
          app/AndroidManifest.xml app/src/main/res/layout/home.xml \
+         app/src/debug/res/xml/network_security_config.xml \
+         app/src/main/res/xml/network_security_config.xml \
          app/src/main/java/com/example/ui/HomeScreen.kt app/src/main/java/com/example/data/Repo.java \
          app/proguard-rules.pro; do
   printf '%-52s' "$f"; ocr rules check "$f" | sed -n '2,3p' | tr '\n' ' '; echo
@@ -82,7 +87,8 @@ GitHub Action 侧，团队规范的价值最终体现在**分流**上：`route_s
 ## 维护
 
 - **升级 compileSdk / AGP / 依赖后**：重跑 `collect-lint-report.sh`，报告变化写进 PR 说明。
-- **规则演进**：一次只改一条，改完 `ocr rules check` 确认，跑一次真实 PR 看会不会误报。加规则容易，去掉噪声难。改 `rule.json` 或 `android-conventions.md` 时，同步更新 `CONVENTIONS.md`（给人看的说明），三者不要各自演化。
+- **规则演进**：一次只改一条，改完 `ocr rules check` 确认，跑一次真实 PR 看会不会误报。加规则容易，去掉噪声难。改 `rule.json` 或 `android-conventions.md` 时，同步更新 `CONVENTIONS.md`（给人看的说明）与 `ADDED-RULES.md`（新增规则的汇总 + 第 8 节的 `rule.json` 全量检查点索引），三者不要各自演化。
+- **改「整份文件判」的条目要连带看 Scope 行**：`rule.json` 每条规则末尾的 `Scope:` 写的是「不报 diff 没碰到的既有问题」，与文件级判定冲突时模型会照 Scope 行漏报。触发文件级判定的条目必须自己在正文里写明范围，并把 Scope 行改成「除该条目外，其余只看本次改动」。
 - **规则文件不要写"注意性能"**：写不出来的判定标准就是无效标准，会变成模型的自由发挥。
 
 ## 四个 Android 特有的注意点
@@ -106,6 +112,7 @@ GitHub Action 侧，团队规范的价值最终体现在**分流**上：`route_s
 | 代码异味、复杂度、未使用资源 | detekt / Android Lint |
 | API 级别误用、资源/Manifest 结构 | Android Lint |
 | 已知 `@Deprecated` 符号 | Android Lint + Kotlin 编译警告 → 喂给 `.ocr/lint-report.md` |
+| 固定符号的静态匹配（`Runtime.exec`、`ProcessBuilder`、`DexClassLoader`、`getExternalStorageDirectory`、`/sdcard` 字面量） | 自定义 Android Lint 规则 / Semgrep 全仓扫 |
 | **语义、意图、跨文件影响、架构一致性** | **本规范（OCR）** |
 
-把 lint 能做的事写进 OCR 规则是负收益：花 token、还会和 lint 的结果打架。
+把 lint 能做的事写进 OCR 规则是负收益：花 token、还会和 lint 的结果打架。只有「禁止的敏感 API」这一条是两边都要开：静态工具保证符号级零漏报，OCR 补反射、字符串拼接、封装多层这类绕过写法。
